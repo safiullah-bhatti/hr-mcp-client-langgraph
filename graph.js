@@ -99,8 +99,14 @@ function parseToolResult(toolName, rawText) {
       .join("\n\n---\n\n");
     return { topScore: parsed.topScore ?? 0, text };
   } catch {
-    // Server returned something unparsable — don't crash the graph
-    // over it, just don't trigger a retry loop on bad data.
+    // Valid, non-error response that still wasn't parseable JSON —
+    // shouldn't happen given server.js's contract, but don't crash
+    // the graph over it. Loud on purpose: this means server.js and
+    // graph.js have drifted out of sync somehow, and staying silent
+    // here is exactly what hid the bug you just ran into.
+    console.log(
+      `[CLIENT] [graph:tools] WARNING: "${toolName}" returned non-JSON, non-error text — treating as pass-through: ${rawText}`
+    );
     return { topScore: 1, text: rawText };
   }
 }
@@ -140,6 +146,24 @@ export function buildGraph({ boundModel, rawModel, mcpClient }) {
         );
         const result = await mcpClient.callTool({ name: call.name, arguments: call.args });
         const rawText = result.content.map((c) => c.text).join(" ");
+
+        if (result.isError) {
+          // The MCP tool handler threw (e.g. an embeddings-API call
+          // failed). This is NOT "weak retrieval" — don't run it
+          // through parseToolResult/the retry logic at all, just
+          // surface it plainly so it's visible instead of silently
+          // misread as a fine, never-retry result.
+          console.log(`[CLIENT] [graph:tools] "${call.name}" call FAILED: ${rawText}`);
+          settledMessages.push(
+            new ToolMessage({
+              content: `Tool error (not a retrieval-quality issue): ${rawText}`,
+              tool_call_id: call.id,
+              name: call.name,
+            })
+          );
+          return;
+        }
+
         const { topScore, text } = parseToolResult(call.name, rawText);
         console.log(`[CLIENT] [graph:tools] "${call.name}" topScore=${topScore}`);
 
@@ -199,6 +223,20 @@ export function buildGraph({ boundModel, rawModel, mcpClient }) {
 
       const result = await mcpClient.callTool({ name: call.name, arguments: { query: newQuery } });
       const rawText = result.content.map((c) => c.text).join(" ");
+
+      if (result.isError) {
+        console.log(`[CLIENT] [graph:rewriteQuery] retry call FAILED: ${rawText}`);
+        newMessages.push(
+          new ToolMessage({
+            content: `Tool error on retry (not a retrieval-quality issue): ${rawText}`,
+            tool_call_id: call.id,
+            name: call.name,
+          })
+        );
+        retryUpdates[call.id] = (state.retryCounts[call.id] || 0) + 1;
+        continue;
+      }
+
       const { topScore, text } = parseToolResult(call.name, rawText);
       console.log(`[CLIENT] [graph:rewriteQuery] retry topScore=${topScore}`);
 
