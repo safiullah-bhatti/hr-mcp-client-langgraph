@@ -1,0 +1,14 @@
+{
+  "name": "hr-mcp-client-langchain",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "client.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "dotenv": "^16.4.5",
+    "@langchain/core": "^0.3.40",
+    "@langchain/anthropic": "^0.3.13",
+    "@langchain/google-genai": "^0.1.9",
+    "@langchain/langgraph": "^0.2.44"
+  }
+}
