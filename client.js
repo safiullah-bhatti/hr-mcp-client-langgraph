@@ -29,9 +29,11 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HumanMessage } from "@langchain/core/messages";
 import { buildGraph } from "./graph.js";
+import { ChatOllama } from "@langchain/ollama";
+import Setting from "./settings.js";
 
-const MCP_SERVER_URL = process.env.MCP_SERVER_URL || "http://localhost:3000/mcp";
-const PROVIDER = (process.env.MODEL_PROVIDER || "gemini").toLowerCase();
+const MCP_SERVER_URL = Setting.MCP.SERVER;
+const PROVIDER = Setting.MODEL.PROVIDER.toLowerCase();
 
 // The one place that knows the two providers are different at all —
 // unchanged from before.
@@ -39,14 +41,24 @@ function getChatModel() {
   if (PROVIDER === "gemini") {
     console.log("[CLIENT] Using provider: gemini");
     return new ChatGoogleGenerativeAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      model: "gemini-3.6-flash",
+      apiKey: Setting.GEMINI.API_KEY,
+      model: Setting.GEMINI.MODEL_NAME,
+    });
+  }
+  if (PROVIDER === "ollama") {
+    //const model = process.env.OLLAMA_MODEL || "llama3.1:8b";
+    const model = Setting.OLLAMA.MODEL_NAME;
+    const baseUrl = Setting.OLLAMA.BASE_URL;
+    console.log(`[CLIENT] Using provider: ollama (model=${model}, baseUrl=${baseUrl})`);
+    return new ChatOllama({
+      model,
+      baseUrl,
     });
   }
   console.log("[CLIENT] Using provider: claude");
   return new ChatAnthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    model: "claude-sonnet-4-6",
+    apiKey: Setting.ANTHROPIC.API_KEY,
+    model: Setting.ANTHROPIC.MODEL_NAME,
     maxTokens: 300,
   });
 }
@@ -55,7 +67,7 @@ async function main() {
   const userMessage = process.argv.slice(2).join(" ");
   if (!userMessage) {
     console.log('Usage: node client.js "your question here"');
-    console.log("       MODEL_PROVIDER=gemini node client.js \"your question here\"");
+    console.log(`       MODEL_PROVIDER=${Setting.MODEL.PROVIDER} node client.js "your question here"`);
     return;
   }
 
